@@ -45,9 +45,9 @@ services:
 
 
   marketplace-seeder:
-
     build:
       context: ./infrastructure/source_systems/marketplace_db
+      dockerfile: Dockerfile
 
     environment:
       DB_HOST: marketplace-db
@@ -59,6 +59,20 @@ services:
     depends_on:
       marketplace-db:
         condition: service_healthy
+
+    networks:
+      - auto-platform-net
+
+
+  pricing-api:
+    build:
+      context: ./infrastructure/source_systems/pricing_api
+      dockerfile: Dockerfile
+
+    container_name: pricing-api
+
+    ports:
+      - "8002:8000"
 
     networks:
       - auto-platform-net
