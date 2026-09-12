@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment / credentials
+.env
+*.pem
+*.key
+credentials.json
+
+# AWS
+.aws/
+
+# Airflow
+airflow/logs/
+airflow/.env
+
+# Data
+data/
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
