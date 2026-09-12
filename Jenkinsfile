@@ -418,7 +418,7 @@ migration_dir = Path(
 )
 
 pattern = re.compile(
-    r"^V(\d{3,})__.+\.sql$"
+    r"^V([0-9]{3,})__.+[.]sql$"
 )
 
 files = sorted(
