@@ -16,17 +16,44 @@ MIGRATION_PATTERN = re.compile(
 )
 
 
-def calculate_sha256(path: Path) -> str:
-    sha256 = hashlib.sha256()
+def read_normalized_sql(path: Path) -> str:
+    """
+    Read SQL in a platform-independent way.
 
-    with path.open("rb") as file:
-        for chunk in iter(
-            lambda: file.read(1024 * 1024),
-            b""
-        ):
-            sha256.update(chunk)
+    - Removes UTF-8 BOM
+    - Converts CRLF/CR to LF
+    - Removes trailing whitespace
+    - Guarantees one final newline
+    """
 
-    return sha256.hexdigest()
+    text = path.read_text(
+        encoding="utf-8-sig"
+    )
+
+    text = (
+        text
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
+
+    lines = [
+        line.rstrip()
+        for line in text.splitlines()
+    ]
+
+    return (
+        "\n".join(lines).strip()
+        + "\n"
+    )
+
+
+def calculate_sha256_from_sql(
+    sql: str
+) -> str:
+
+    return hashlib.sha256(
+        sql.encode("utf-8")
+    ).hexdigest()
 
 
 def create_session(profile, region):
@@ -59,9 +86,9 @@ def get_migrations(migrations_dir: Path):
         version = match.group(1)
         description = match.group(2)
 
-        sql = path.read_text(
-            encoding="utf-8-sig"
-        ).strip()
+        sql = read_normalized_sql(
+            path
+        )
 
         if not sql:
             raise ValueError(
@@ -76,8 +103,8 @@ def get_migrations(migrations_dir: Path):
                 "filename": path.name,
                 "path": path,
                 "sql": sql,
-                "sha256": calculate_sha256(
-                    path
+                "sha256": calculate_sha256_from_sql(
+                    sql
                 ),
             }
         )
@@ -496,7 +523,7 @@ def parse_args():
         "--history-prefix",
         default=(
             "platform-control/"
-            "schema-migrations"
+            "schema-migrations-v2"
         ),
     )
 
