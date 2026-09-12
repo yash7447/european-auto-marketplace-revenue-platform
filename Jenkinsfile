@@ -4,11 +4,39 @@ pipeline {
 
     options {
         timestamps()
+        disableConcurrentBuilds()
+
+        timeout(
+            time: 30,
+            unit: 'MINUTES'
+        )
     }
+
+    environment {
+
+        COMPOSE_PROJECT_NAME =
+            'european-auto-marketplace-revenue-platform'
+
+        AWS_PROFILE =
+            'auto-marketplace'
+
+        AWS_DEFAULT_REGION =
+            'us-east-1'
+
+        ATHENA_BUCKET =
+            'european-auto-marketplace-data-yash-2026-01'
+    }
+
 
     stages {
 
+
+        // ====================================================
+        // 1. CHECKOUT
+        // ====================================================
+
         stage('Checkout') {
+
             steps {
 
                 echo 'Checking out latest code...'
@@ -18,46 +46,75 @@ pipeline {
                 sh '''
                     echo "Commit:"
                     git rev-parse --short HEAD
+
+                    echo "Branch:"
+                    git branch --show-current || true
                 '''
             }
         }
 
 
+        // ====================================================
+        // 2. PYTHON SYNTAX VALIDATION
+        // ====================================================
+
         stage('Python Syntax Validation') {
+
             steps {
 
                 echo 'Validating Python syntax...'
 
                 sh '''
-                    python3 -m compileall -q infrastructure
+                    python3 -m compileall -q \
+                      infrastructure \
+                      src/platform \
+                      airflow/dags
+
+                    echo "Python syntax validation passed."
                 '''
             }
         }
 
 
+        // ====================================================
+        // 3. DOCKER COMPOSE VALIDATION
+        // ====================================================
+
         stage('Docker Compose Validation') {
+
             steps {
 
-                echo 'Validating Docker Compose...'
+                echo 'Validating Docker Compose configuration...'
 
                 sh '''
                     docker compose \
-                      -p european-auto-marketplace-revenue-platform \
+                      -p "$COMPOSE_PROJECT_NAME" \
                       -f docker-compose.sources.yml \
                       config -q
+
+                    docker compose \
+                      -f docker-compose.airflow.yml \
+                      config -q
+
+                    echo "Docker Compose validation passed."
                 '''
             }
         }
 
 
+        // ====================================================
+        // 4. BUILD SOURCE SYSTEM IMAGES
+        // ====================================================
+
         stage('Docker Image Build') {
+
             steps {
 
                 echo 'Building source system images...'
 
                 sh '''
                     docker compose \
-                      -p european-auto-marketplace-revenue-platform \
+                      -p "$COMPOSE_PROJECT_NAME" \
                       -f docker-compose.sources.yml \
                       build \
                       commercial-api \
@@ -65,19 +122,26 @@ pipeline {
                       pricing-api \
                       engagement-generator \
                       sales-target-generator
+
+                    echo "Docker image build passed."
                 '''
             }
         }
 
 
+        // ====================================================
+        // 5. START CORE SOURCE SYSTEMS
+        // ====================================================
+
         stage('Start Core Source Systems') {
+
             steps {
 
                 echo 'Starting source systems using latest images...'
 
                 sh '''
                     docker compose \
-                      -p european-auto-marketplace-revenue-platform \
+                      -p "$COMPOSE_PROJECT_NAME" \
                       -f docker-compose.sources.yml \
                       up -d \
                       --force-recreate \
@@ -89,7 +153,12 @@ pipeline {
         }
 
 
+        // ====================================================
+        // 6. WAIT FOR SERVICES
+        // ====================================================
+
         stage('Wait For Services') {
+
             steps {
 
                 echo 'Waiting for APIs and database...'
@@ -113,7 +182,6 @@ pipeline {
                         fi
 
                         sleep 2
-
                     done
 
 
@@ -135,11 +203,10 @@ pipeline {
                         fi
 
                         sleep 2
-
                     done
 
 
-                    echo "Waiting for PostgreSQL..."
+                    echo "Waiting for Marketplace PostgreSQL..."
 
                     for i in $(seq 1 30); do
 
@@ -154,25 +221,29 @@ pipeline {
                         fi
 
                         if [ "$i" -eq 30 ]; then
-                            echo "PostgreSQL failed to start."
+                            echo "Marketplace PostgreSQL failed to start."
                             exit 1
                         fi
 
                         sleep 2
-
                     done
                 '''
             }
         }
 
 
+        // ====================================================
+        // 7. API INTEGRATION TESTS
+        // ====================================================
+
         stage('API Integration Tests') {
+
             steps {
 
-                echo 'Testing API responses and expected source counts...'
+                echo 'Testing APIs and expected source counts...'
 
                 sh '''
-                    python3 - <<'PY'
+python3 - <<'PY'
 
 import json
 import urllib.request
@@ -187,13 +258,18 @@ def get_json(url):
 
         if response.status != 200:
             raise RuntimeError(
-                f"{url} returned HTTP {response.status}"
+                f"{url} returned HTTP "
+                f"{response.status}"
             )
 
         return json.loads(
             response.read().decode("utf-8")
         )
 
+
+# ------------------------------------------------------------
+# Commercial API
+# ------------------------------------------------------------
 
 commercial = get_json(
     "http://commercial-api:8000/health"
@@ -210,6 +286,10 @@ assert commercial["contracts"] == 8000
 assert commercial["subscriptions"] == 12000
 assert commercial["invoices"] == 60000
 
+
+# ------------------------------------------------------------
+# Pricing API
+# ------------------------------------------------------------
 
 pricing = get_json(
     "http://pricing-api:8000/health"
@@ -235,7 +315,12 @@ PY
         }
 
 
+        // ====================================================
+        // 8. MARKETPLACE DATABASE TESTS
+        // ====================================================
+
         stage('Marketplace Database Tests') {
+
             steps {
 
                 echo 'Testing marketplace PostgreSQL...'
@@ -290,38 +375,245 @@ PY
             }
         }
 
+
+        // ====================================================
+        // 9. VALIDATE ATHENA MIGRATION FRAMEWORK
+        // ====================================================
+
+        stage('Validate Athena Migrations') {
+
+            steps {
+
+                echo 'Validating Athena migration framework...'
+
+                sh '''
+                    echo "Checking migration directory..."
+
+                    test -d sql/migrations
+
+
+                    echo "Checking migration runner..."
+
+                    test -f \
+                      src/platform/athena_migrate.py
+
+
+                    echo "Migration files:"
+
+                    ls -1 sql/migrations
+
+
+                    echo "Validating migration naming and versions..."
+                '''
+
+                sh '''
+python3 - <<'PY'
+
+from pathlib import Path
+import re
+
+
+migration_dir = Path(
+    "sql/migrations"
+)
+
+pattern = re.compile(
+    r"^V(\\d{3,})__.+\\.sql$"
+)
+
+files = sorted(
+    migration_dir.glob("*.sql")
+)
+
+
+if not files:
+
+    raise SystemExit(
+        "No Athena migration files found."
+    )
+
+
+versions = set()
+
+
+for path in files:
+
+    match = pattern.match(
+        path.name
+    )
+
+    if not match:
+
+        raise SystemExit(
+            f"Invalid migration filename: "
+            f"{path.name}"
+        )
+
+
+    version = match.group(1)
+
+
+    if version in versions:
+
+        raise SystemExit(
+            f"Duplicate migration version: "
+            f"V{version}"
+        )
+
+
+    versions.add(
+        version
+    )
+
+
+    sql = path.read_text(
+        encoding="utf-8-sig"
+    ).strip()
+
+
+    if not sql:
+
+        raise SystemExit(
+            f"Empty migration: "
+            f"{path.name}"
+        )
+
+
+print(
+    f"Validated {len(files)} "
+    f"Athena migration files."
+)
+
+print(
+    "Versions:",
+    ", ".join(
+        f"V{version}"
+        for version in sorted(versions)
+    )
+)
+
+PY
+                '''
+
+                sh '''
+                    echo "Checking Python migration runner syntax..."
+
+                    python3 -m compileall \
+                      -q \
+                      src/platform
+
+                    echo "Athena migration validation passed."
+                '''
+            }
+        }
+
+
+        // ====================================================
+        // 10. VERIFY AWS AUTHENTICATION
+        // ====================================================
+
+        stage('AWS Authentication Check') {
+
+            steps {
+
+                echo 'Verifying Jenkins AWS identity...'
+
+                sh '''
+                    echo "AWS CLI:"
+                    aws --version
+
+                    echo "AWS profile:"
+                    echo "$AWS_PROFILE"
+
+                    echo "AWS region:"
+                    echo "$AWS_DEFAULT_REGION"
+
+                    echo "AWS caller identity:"
+
+                    aws sts get-caller-identity \
+                      --profile "$AWS_PROFILE"
+
+                    echo "AWS authentication passed."
+                '''
+            }
+        }
+
+
+        // ====================================================
+        // 11. DEPLOY ATHENA / GLUE SCHEMA MIGRATIONS
+        // ====================================================
+
+        stage('Deploy Athena Migrations') {
+
+            steps {
+
+                echo '''
+Deploying Athena schema migrations.
+
+Already-applied migrations will be skipped.
+New migrations will be executed exactly once.
+Modified historical migrations will fail deployment.
+'''
+
+                sh '''
+                    python3 \
+                      src/platform/athena_migrate.py \
+                      --profile "$AWS_PROFILE" \
+                      --region "$AWS_DEFAULT_REGION" \
+                      --bucket "$ATHENA_BUCKET"
+                '''
+            }
+        }
+
     }
 
 
+    // ========================================================
+    // POST BUILD
+    // ========================================================
+
     post {
+
 
         success {
 
             echo '''
-CI PASSED
+============================================================
+CI/CD PASSED
+============================================================
 
-? Git checkout
-? Python syntax
-? Docker Compose
-? Docker builds
-? Services started
-? Commercial API
-? Pricing API
-? Marketplace database
-? Expected source record counts
+[OK] Git checkout
+[OK] Python syntax
+[OK] Docker Compose validation
+[OK] Docker builds
+[OK] Core source systems started
+[OK] Commercial API validation
+[OK] Pricing API validation
+[OK] Marketplace PostgreSQL validation
+[OK] Expected source record counts
+[OK] Athena migration validation
+[OK] AWS authentication
+[OK] Athena / Glue schema deployment
+
+Platform code and schema are valid and deployable.
+============================================================
 '''
-
         }
 
 
         failure {
 
             echo '''
-CI FAILED
+============================================================
+CI/CD FAILED
+============================================================
 
 Inspect the first failed Jenkins stage.
-'''
 
+Schema migration deployment stops immediately on failure.
+Previously applied migrations are not modified.
+============================================================
+'''
         }
 
     }
