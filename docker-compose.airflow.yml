@@ -1,0 +1,143 @@
+services:
+
+  airflow-db:
+    image: postgres:16
+    container_name: airflow-db
+
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U airflow -d airflow"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - auto-platform-net
+
+
+  airflow-init:
+    image: apache/airflow:2.10.5
+    container_name: airflow-init
+
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./sample_data:/opt/airflow/sample_data:ro
+
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Yash \
+          --lastname Admin \
+          --role Admin \
+          --email admin@example.com || true
+
+    networks:
+      - auto-platform-net
+
+
+  airflow-webserver:
+    image: apache/airflow:2.10.5
+    container_name: airflow-webserver
+
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./sample_data:/opt/airflow/sample_data:ro
+
+    command: webserver
+
+    ports:
+      - "8081:8080"
+
+    networks:
+      - auto-platform-net
+
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.5
+    container_name: airflow-scheduler
+
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AWS_PROFILE: auto-marketplace
+      AWS_DEFAULT_REGION: us-east-1
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./sample_data:/opt/airflow/sample_data:ro
+      - ${USERPROFILE}/.aws:/home/airflow/.aws:ro
+
+    command: scheduler
+
+    networks:
+      - auto-platform-net
+
+
+volumes:
+  airflow_postgres_data:
+
+
+networks:
+
+  auto-platform-net:
+    external: true
+    name: auto-platform-net
