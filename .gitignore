@@ -26,6 +26,7 @@ data/
 infrastructure/source_systems/commercial_api/data/
 infrastructure/source_systems/pricing_api/data/
 sample_data/engagement_events/
+sample_data/sales_targets/
 tmp/
 
 # OS
