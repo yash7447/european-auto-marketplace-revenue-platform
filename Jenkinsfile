@@ -42,6 +42,7 @@ pipeline {
 
                 sh '''
                     docker compose \
+                      -p european-auto-marketplace-revenue-platform \
                       -f docker-compose.sources.yml \
                       config -q
                 '''
@@ -56,6 +57,7 @@ pipeline {
 
                 sh '''
                     docker compose \
+                      -p european-auto-marketplace-revenue-platform \
                       -f docker-compose.sources.yml \
                       build \
                       commercial-api \
@@ -75,6 +77,7 @@ pipeline {
 
                 sh '''
                     docker compose \
+                      -p european-auto-marketplace-revenue-platform \
                       -f docker-compose.sources.yml \
                       up -d \
                       --force-recreate \
