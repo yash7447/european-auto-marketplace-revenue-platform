@@ -1,7 +1,6 @@
 services:
 
   commercial-api:
-
     build:
       context: ./infrastructure/source_systems/commercial_api
 
@@ -12,6 +11,62 @@ services:
 
     networks:
       - auto-platform-net
+
+
+  marketplace-db:
+    image: postgres:16
+
+    container_name: marketplace-db
+
+    environment:
+      POSTGRES_USER: marketuser
+      POSTGRES_PASSWORD: marketpassword
+      POSTGRES_DB: marketplace
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - marketplace_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U marketuser -d marketplace"
+        ]
+
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - auto-platform-net
+
+
+  marketplace-seeder:
+
+    build:
+      context: ./infrastructure/source_systems/marketplace_db
+
+    environment:
+      DB_HOST: marketplace-db
+      DB_PORT: 5432
+      DB_NAME: marketplace
+      DB_USER: marketuser
+      DB_PASSWORD: marketpassword
+
+    depends_on:
+      marketplace-db:
+        condition: service_healthy
+
+    networks:
+      - auto-platform-net
+
+
+volumes:
+
+  marketplace_postgres_data:
 
 
 networks:
