@@ -77,6 +77,29 @@ services:
     networks:
       - auto-platform-net
 
+  engagement-generator:
+
+    build:
+      context: ./infrastructure/source_systems/engagement_events
+      dockerfile: Dockerfile
+
+    environment:
+      DB_HOST: marketplace-db
+      DB_PORT: 5432
+      DB_NAME: marketplace
+      DB_USER: marketuser
+      DB_PASSWORD: marketpassword
+
+    volumes:
+      - ./sample_data/engagement_events:/data
+
+    depends_on:
+      marketplace-db:
+        condition: service_healthy
+
+    networks:
+      - auto-platform-net
+
 
 volumes:
 
