@@ -23,6 +23,7 @@ airflow/.env
 
 # Data
 data/
+infrastructure/source_systems/commercial_api/data/
 tmp/
 
 # OS

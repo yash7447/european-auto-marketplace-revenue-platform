@@ -1,0 +1,20 @@
+services:
+
+  commercial-api:
+
+    build:
+      context: ./infrastructure/source_systems/commercial_api
+
+    container_name: commercial-api
+
+    ports:
+      - "8001:8000"
+
+    networks:
+      - auto-platform-net
+
+
+networks:
+
+  auto-platform-net:
+    name: auto-platform-net
