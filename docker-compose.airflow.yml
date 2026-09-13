@@ -84,6 +84,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      PYTHONPATH: /opt/airflow/plugins
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -118,6 +119,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      PYTHONPATH: /opt/airflow/plugins
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
