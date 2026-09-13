@@ -94,6 +94,7 @@ services:
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
       - ./sample_data:/opt/airflow/sample_data:ro
+      - ./sql:/opt/airflow/sql:ro
 
     command: webserver
 
@@ -130,6 +131,7 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
       - ./sample_data:/opt/airflow/sample_data:ro
       - ${USERPROFILE}/.aws:/home/airflow/.aws:ro
+      - ./sql:/opt/airflow/sql:ro
 
     command: scheduler
 
